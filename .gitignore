@@ -11,3 +11,6 @@ TODOs.md
 dts-build/packages
 *.tsbuildinfo
 *.tgz
+
+# Documentation
+*文档*/

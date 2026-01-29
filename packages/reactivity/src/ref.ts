@@ -62,7 +62,7 @@ export function ref<T>(
 export function ref<T = any>(): Ref<T | undefined>
 /*@__NO_SIDE_EFFECTS__*/
 export function ref(value?: unknown) {
-  return createRef(value, false)
+  return createRef(value, false) // 1 ： 提供 ref函数 ， false 是否浅复制
 }
 
 declare const ShallowRefMarker: unique symbol
@@ -101,34 +101,44 @@ export function shallowRef(value?: unknown) {
   return createRef(value, true)
 }
 
+/**
+ * 调用 ref 返回一个 创建 的方法 createRef 传入 两个值
+ * @param rawValue ref函数传入的参数
+ * @param shallow 是否浅复制
+ */
 function createRef(rawValue: unknown, shallow: boolean) {
   if (isRef(rawValue)) {
+    // 是否是ref对象 如果是 则 直接返回
     return rawValue
   }
-  return new RefImpl(rawValue, shallow)
+  return new RefImpl(rawValue, shallow) // 否则 创建 ref 对象 传入 rawValue shallow
 }
 
 /**
  * @internal
  */
 class RefImpl<T = any> {
-  _value: T
-  private _rawValue: T
+  // 创建一个 ref的 实现类
+  _value: T // 创建私有的 _value 变量 (🆕 未声明为 private)
+  private _rawValue: T // 创建私有的 _rawValue 变量
 
-  dep: Dep = new Dep()
+  dep: Dep = new Dep() // 是否 dep (🆕 已初始化为 Dep 实例)
 
-  public readonly [ReactiveFlags.IS_REF] = true
+  public readonly [ReactiveFlags.IS_REF] = true // 只读的 属性 是否是 ref (🆕 使用 ReactiveFlags.IS_REF)
   public readonly [ReactiveFlags.IS_SHALLOW]: boolean = false
 
   constructor(value: T, isShallow: boolean) {
-    this._rawValue = isShallow ? value : toRaw(value)
-    this._value = isShallow ? value : toReactive(value)
+    // 实例被 new时 执行 constructor 保存 传入的值
+    this._rawValue = isShallow ? value : toRaw(value) // 是否浅复制 ， 如果时 则直接返回 传入的值 否则进行 获取其原始对象
+    this._value = isShallow ? value : toReactive(value) // 是否浅复制 是 返回原value 否则 转换成 reactive 对象
     this[ReactiveFlags.IS_SHALLOW] = isShallow
   }
 
   get value() {
+    // 获取值的时候 直接将 constructor 保存的值 返回
     if (__DEV__) {
       this.dep.track({
+        // 跟踪 ref 的 value (🆕 使用 this.dep.track)
         target: this,
         type: TrackOpTypes.GET,
         key: 'value',
@@ -136,21 +146,27 @@ class RefImpl<T = any> {
     } else {
       this.dep.track()
     }
-    return this._value
+    return this._value // 获取value 是 返回 _value 对象
   }
 
   set value(newValue) {
+    // 当 设置值的时候 往下看
     const oldValue = this._rawValue
+    // 是否浅复制 or 值身上是否有 __v_isShallow 标识 or 是否是只读的 标识__v_isReadonly
     const useDirectValue =
       this[ReactiveFlags.IS_SHALLOW] ||
       isShallow(newValue) ||
       isReadonly(newValue)
+    // 如果满足 则 返回新设置的值  ， 如果不是 则 取出 新值的原始对象
+    // 如果 你一个 浅层对象（普通数据类型） 则 原值返回 否则 判断是否能从 代理对象中 取出源值
     newValue = useDirectValue ? newValue : toRaw(newValue)
     if (hasChanged(newValue, oldValue)) {
-      this._rawValue = newValue
-      this._value = useDirectValue ? newValue : toReactive(newValue)
+      // 判断对象是否发生 变化 变了向下走
+      this._rawValue = newValue // 将最新值 赋给 _rawValue
+      this._value = useDirectValue ? newValue : toReactive(newValue) // 判断是否是基本数据类型  如果 是 则 将最新值返回 否则 继续转换 reactive
       if (__DEV__) {
         this.dep.trigger({
+          // 触发 ref 的 value 值进行监听更新 (🆕 使用 this.dep.trigger)
           target: this,
           type: TriggerOpTypes.SET,
           key: 'value',
