@@ -20,7 +20,16 @@ export const isOn = (key: string): boolean =>
 
 export const isModelListener = (key: string): key is `onUpdate:${string}` =>
   key.startsWith('onUpdate:')
-
+/* 
+作用：
+语义更清晰：extend 比 Object.assign 更直观地表达“扩展/合并对象”。
+集中管理：以后如果要改实现（例如加 polyfill、换实现），只需改一处。
+类型约束：typeof Object.assign 保证类型和原生一致。
+是否要借鉴：
+小型项目：不必，直接用 Object.assign 即可。
+库或框架：可以考虑，有利于统一风格和后续维护。
+这是 Vue 内部的一种工程化写法，不是必须遵循的规范。
+*/
 export const extend: typeof Object.assign = Object.assign
 
 export const remove = <T>(arr: T[], el: T): void => {

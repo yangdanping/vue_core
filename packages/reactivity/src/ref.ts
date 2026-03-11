@@ -102,7 +102,7 @@ export function shallowRef(value?: unknown) {
 }
 
 /**
- * 调用 ref 返回一个 创建 的方法 createRef 传入 两个值
+ * 🌟调用 ref 返回一个 创建 的方法 createRef 传入 两个值
  * @param rawValue ref函数传入的参数
  * @param shallow 是否浅复制
  */
@@ -136,16 +136,7 @@ class RefImpl<T = any> {
 
   get value() {
     // 获取值的时候 直接将 constructor 保存的值 返回
-    if (__DEV__) {
-      this.dep.track({
-        // 跟踪 ref 的 value (🆕 使用 this.dep.track)
-        target: this,
-        type: TrackOpTypes.GET,
-        key: 'value',
-      })
-    } else {
-      this.dep.track()
-    }
+    this.dep.track()
     return this._value // 获取value 是 返回 _value 对象
   }
 
@@ -164,18 +155,7 @@ class RefImpl<T = any> {
       // 判断对象是否发生 变化 变了向下走
       this._rawValue = newValue // 将最新值 赋给 _rawValue
       this._value = useDirectValue ? newValue : toReactive(newValue) // 判断是否是基本数据类型  如果 是 则 将最新值返回 否则 继续转换 reactive
-      if (__DEV__) {
-        this.dep.trigger({
-          // 触发 ref 的 value 值进行监听更新 (🆕 使用 this.dep.trigger)
-          target: this,
-          type: TriggerOpTypes.SET,
-          key: 'value',
-          newValue,
-          oldValue,
-        })
-      } else {
-        this.dep.trigger()
-      }
+      this.dep.trigger()
     }
   }
 }

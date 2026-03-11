@@ -938,8 +938,8 @@ export default class Tokenizer {
 
   /**
    * Iterates through the buffer, calling the function corresponding to the current state.
-   *
    * States that are more likely to be hit are higher up, as a performance improvement.
+   * 遍历缓冲区，调用与当前状态对应的函数,为提高性能，将更可能被触发的状态置于更高位置。
    */
   public parse(input: string): void {
     this.buffer = input
