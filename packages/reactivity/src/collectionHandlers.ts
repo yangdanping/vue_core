@@ -76,13 +76,6 @@ function createIterableMethod(
 
 function createReadonlyMethod(type: TriggerOpTypes): Function {
   return function (this: CollectionTypes, ...args: unknown[]) {
-    if (__DEV__) {
-      const key = args[0] ? `on key "${args[0]}" ` : ``
-      warn(
-        `${capitalize(type)} operation ${key}failed: target is readonly.`,
-        toRaw(this),
-      )
-    }
     return type === TriggerOpTypes.DELETE
       ? false
       : type === TriggerOpTypes.CLEAR
@@ -93,11 +86,13 @@ function createReadonlyMethod(type: TriggerOpTypes): Function {
 
 type Instrumentations = Record<string | symbol, Function | number>
 
+// 🌟在 get 代码中track -> 追踪 , 在set 代码 中 trigger -> 触发更新
 function createInstrumentations(
   readonly: boolean,
   shallow: boolean,
 ): Instrumentations {
   const instrumentations: Instrumentations = {
+    // 🌟get函数依赖追踪 track
     get(this: MapTypes, key: unknown) {
       // #1772: readonly(reactive(Map)) should return readonly + reactive version
       // of the value
@@ -122,48 +117,48 @@ function createInstrumentations(
         target.get(key)
       }
     },
-    get size() {
-      const target = (this as unknown as IterableCollections)[ReactiveFlags.RAW]
-      !readonly && track(toRaw(target), TrackOpTypes.ITERATE, ITERATE_KEY)
-      return target.size
-    },
-    has(this: CollectionTypes, key: unknown): boolean {
-      const target = this[ReactiveFlags.RAW]
-      const rawTarget = toRaw(target)
-      const rawKey = toRaw(key)
-      if (!readonly) {
-        if (hasChanged(key, rawKey)) {
-          track(rawTarget, TrackOpTypes.HAS, key)
-        }
-        track(rawTarget, TrackOpTypes.HAS, rawKey)
-      }
-      return key === rawKey
-        ? target.has(key)
-        : target.has(key) || target.has(rawKey)
-    },
-    forEach(this: IterableCollections, callback: Function, thisArg?: unknown) {
-      const observed = this
-      const target = observed[ReactiveFlags.RAW]
-      const rawTarget = toRaw(target)
-      const wrap = shallow ? toShallow : readonly ? toReadonly : toReactive
-      !readonly && track(rawTarget, TrackOpTypes.ITERATE, ITERATE_KEY)
-      return target.forEach((value: unknown, key: unknown) => {
-        // important: make sure the callback is
-        // 1. invoked with the reactive map as `this` and 3rd arg
-        // 2. the value received should be a corresponding reactive/readonly.
-        return callback.call(thisArg, wrap(value), wrap(key), observed)
-      })
-    },
+    // get size() {
+    //   const target = (this as unknown as IterableCollections)[ReactiveFlags.RAW]
+    //   !readonly && track(toRaw(target), TrackOpTypes.ITERATE, ITERATE_KEY)
+    //   return target.size
+    // },
+    // has(this: CollectionTypes, key: unknown): boolean {
+    //   const target = this[ReactiveFlags.RAW]
+    //   const rawTarget = toRaw(target)
+    //   const rawKey = toRaw(key)
+    //   if (!readonly) {
+    //     if (hasChanged(key, rawKey)) {
+    //       track(rawTarget, TrackOpTypes.HAS, key)
+    //     }
+    //     track(rawTarget, TrackOpTypes.HAS, rawKey)
+    //   }
+    //   return key === rawKey
+    //     ? target.has(key)
+    //     : target.has(key) || target.has(rawKey)
+    // },
+    // forEach(this: IterableCollections, callback: Function, thisArg?: unknown) {
+    //   const observed = this
+    //   const target = observed[ReactiveFlags.RAW]
+    //   const rawTarget = toRaw(target)
+    //   const wrap = shallow ? toShallow : readonly ? toReadonly : toReactive
+    //   !readonly && track(rawTarget, TrackOpTypes.ITERATE, ITERATE_KEY)
+    //   return target.forEach((value: unknown, key: unknown) => {
+    //     // important: make sure the callback is
+    //     // 1. invoked with the reactive map as `this` and 3rd arg
+    //     // 2. the value received should be a corresponding reactive/readonly.
+    //     return callback.call(thisArg, wrap(value), wrap(key), observed)
+    //   })
+    // },
   }
 
   extend(
     instrumentations,
     readonly
       ? {
-          add: createReadonlyMethod(TriggerOpTypes.ADD),
-          set: createReadonlyMethod(TriggerOpTypes.SET),
-          delete: createReadonlyMethod(TriggerOpTypes.DELETE),
-          clear: createReadonlyMethod(TriggerOpTypes.CLEAR),
+          // add: createReadonlyMethod(TriggerOpTypes.ADD),
+          // set: createReadonlyMethod(TriggerOpTypes.SET),
+          // delete: createReadonlyMethod(TriggerOpTypes.DELETE),
+          // clear: createReadonlyMethod(TriggerOpTypes.CLEAR),
         }
       : {
           add(this: SetTypes, value: unknown) {
@@ -186,6 +181,7 @@ function createInstrumentations(
             }
             return this
           },
+          // 🌟set函数依赖触发更新 trigger
           set(this: MapTypes, key: unknown, value: unknown) {
             if (!shallow && !isShallow(value) && !isReadonly(value)) {
               value = toRaw(value)
@@ -197,8 +193,6 @@ function createInstrumentations(
             if (!hadKey) {
               key = toRaw(key)
               hadKey = has.call(target, key)
-            } else if (__DEV__) {
-              checkIdentityKeys(target, has, key)
             }
 
             const oldValue = get.call(target, key)
@@ -210,46 +204,44 @@ function createInstrumentations(
             }
             return this
           },
-          delete(this: CollectionTypes, key: unknown) {
-            const target = toRaw(this)
-            const { has, get } = getProto(target)
-            let hadKey = has.call(target, key)
-            if (!hadKey) {
-              key = toRaw(key)
-              hadKey = has.call(target, key)
-            } else if (__DEV__) {
-              checkIdentityKeys(target, has, key)
-            }
+          // delete(this: CollectionTypes, key: unknown) {
+          //   const target = toRaw(this)
+          //   const { has, get } = getProto(target)
+          //   let hadKey = has.call(target, key)
+          //   if (!hadKey) {
+          //     key = toRaw(key)
+          //     hadKey = has.call(target, key)
+          //   }
 
-            const oldValue = get ? get.call(target, key) : undefined
-            // forward the operation before queueing reactions
-            const result = target.delete(key)
-            if (hadKey) {
-              trigger(target, TriggerOpTypes.DELETE, key, undefined, oldValue)
-            }
-            return result
-          },
-          clear(this: IterableCollections) {
-            const target = toRaw(this)
-            const hadItems = target.size !== 0
-            const oldTarget = __DEV__
-              ? isMap(target)
-                ? new Map(target)
-                : new Set(target)
-              : undefined
-            // forward the operation before queueing reactions
-            const result = target.clear()
-            if (hadItems) {
-              trigger(
-                target,
-                TriggerOpTypes.CLEAR,
-                undefined,
-                undefined,
-                oldTarget,
-              )
-            }
-            return result
-          },
+          //   const oldValue = get ? get.call(target, key) : undefined
+          //   // forward the operation before queueing reactions
+          //   const result = target.delete(key)
+          //   if (hadKey) {
+          //     trigger(target, TriggerOpTypes.DELETE, key, undefined, oldValue)
+          //   }
+          //   return result
+          // },
+          // clear(this: IterableCollections) {
+          //   const target = toRaw(this)
+          //   const hadItems = target.size !== 0
+          //   const oldTarget = __DEV__
+          //     ? isMap(target)
+          //       ? new Map(target)
+          //       : new Set(target)
+          //     : undefined
+          //   // forward the operation before queueing reactions
+          //   const result = target.clear()
+          //   if (hadItems) {
+          //     trigger(
+          //       target,
+          //       TriggerOpTypes.CLEAR,
+          //       undefined,
+          //       undefined,
+          //       oldTarget,
+          //     )
+          //   }
+          //   return result
+          // },
         },
   )
 

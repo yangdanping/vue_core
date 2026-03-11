@@ -69,10 +69,12 @@ export type Reactive<T> = UnwrapNestedRefs<T> &
 
 /**
  * Returns a reactive proxy of the object.
+ * 返回该对象的响应式代理。
  *
  * The reactive conversion is "deep": it affects all nested properties. A
  * reactive object also deeply unwraps any properties that are refs while
  * maintaining reactivity.
+ * 响应式转换是“深层的”：会影响所有嵌套属性。响应式对象还会深度解包任何为 ref 的属性，同时保持响应性。
  *
  * @example
  * ```js
@@ -86,19 +88,26 @@ export function reactive<T extends object>(target: T): Reactive<T>
 /*@__NO_SIDE_EFFECTS__*/
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
+  // 如果是 只读的 不允许 写入 则返回只读对象
   if (isReadonly(target)) {
-    // 如果是 只读的 不允许 写入 则返回只读对象
     return target
   }
+  // 最终 创建 并 返回 响应式对象(proxy对象)
   return createReactiveObject(
-    // 返回一个创建 reactive 的对象
-    target, // 传入 目标对象
-    false, // 是否是只读对象
-    mutableHandlers, //提供 get, set, deleteProperty, has, ownKeys 方法
-    mutableCollectionHandlers, // 太多了 自己看源码
+    // 以下传给new Proxy(✅target,handler)
+    target, // 传入[被代理对象]
+    false, // 是否为只读对象
+    // 以下传给new Proxy(target,✅handler)
+    mutableHandlers, // 提供 get, set, deleteProperty, has, ownKeys 等拦截器方法
+    mutableCollectionHandlers, // get,has,add,set,delete,clear,forEach
     reactiveMap, // 提供一个 weakmap 集合
   )
 }
+
+/* 
+mutableHandlers,mutableCollectionHandlers
+其实就是 const PersonProxy = new Proxy(Person, {}) 这个{}中的内容
+*/
 
 // Use a private class brand instead of a marker property so shallow-reactive
 // types remain distinguishable in `UnwrapRef` without leaking the brand into
@@ -268,8 +277,8 @@ function createReactiveObject(
   collectionHandlers: ProxyHandler<any>,
   proxyMap: WeakMap<Target, any>,
 ) {
+  // 如果不是一个对象 则 返回当前 traget
   if (!isObject(target)) {
-    // 如果不是一个对象 则 返回当前 traget
     if (__DEV__) {
       warn(
         `value cannot be made ${isReadonly ? 'readonly' : 'reactive'}: ${String(
@@ -279,20 +288,21 @@ function createReactiveObject(
     }
     return target
   }
-  // target is already a Proxy, return it.
-  // exception: calling readonly() on a reactive object
+  // target is already a Proxy, return it. // target 已是代理，直接返回。
+  // exception: calling readonly() on a reactive object // 例外：在响应式对象上调用 readonly()
   if (
     target[ReactiveFlags.RAW] && // 如果target 已经是一个 代理对象 则 返回当前对象
     !(isReadonly && target[ReactiveFlags.IS_REACTIVE])
   ) {
     return target
   }
-  // only specific value types can be observed.
+  // only specific value types can be observed. // 仅特定类型的值可被观察。
   if (target[ReactiveFlags.SKIP] || !Object.isExtensible(target)) {
     return target
   }
-  // target already has corresponding Proxy
-  const existingProxy = proxyMap.get(target) // 如果对象已经有了代理对象 则直接取值 返回
+  // target already has corresponding Proxy // target 已有对应的代理
+  const existingProxy = proxyMap.get(target) // proxyMap的最主要作用就是看当前的这个对象有无被代理过
+  // 若已经代理过了 则直接 return
   if (existingProxy) {
     return existingProxy
   }
@@ -300,12 +310,14 @@ function createReactiveObject(
   if (targetType === TargetType.INVALID) {
     return target
   }
-  const proxy = new Proxy( // 将对象进行代理
-    target,
-    targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers,
+  // =============================== 最终返回的 proxy ===============================
+  // 若没有被代理过,则在下面进行对象代理
+  const proxy = new Proxy(
+    target, // 代理对象
+    targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers, // 代理方式
   )
   proxyMap.set(target, proxy) // 设置目标为代理对象
-  return proxy // 将对象返回出去
+  return proxy
 }
 
 /**
@@ -434,7 +446,7 @@ export function markRaw<T extends object>(value: T): Raw<T> {
  *
  * @param value - The value for which a reactive proxy shall be created.
  */
-// 判断是否 是对象 如果是 则 reactive代理 否则 返回 当前的value
+// 判断是否 是对象 如果是 则走 reactive 代理 否则 返回 当前的value
 export const toReactive = <T extends unknown>(value: T): T =>
   isObject(value) ? reactive(value) : value
 
