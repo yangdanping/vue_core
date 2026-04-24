@@ -12,6 +12,3 @@ dts-build/packages
 *.tsbuildinfo
 *.tgz
 /.vite-hooks/
-
-# Documentation
-*文档*/
