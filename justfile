@@ -14,6 +14,16 @@ status:
     @git branch -vv
 
 # 一键同步：fetch upstream main → push origin main → rebase study
+#
+# study 分支叠加的学习改动（rebase 时可能与官方冲突）：
+#   - docs/ 笔记、justfile          → 冲突极少（官方无这些文件）
+#   - 源码行尾注释（reactive/ref 等） → 冲突中等（官方改同一行时）
+#   - 删除 __DEV__ 块（component/renderer 等） → 冲突概率高（官方常改 dev 逻辑）
+# 官方未动到 study 改过的文件 → rebase 通常顺利；长期 sync 几乎必然遇冲突。
+#
+# 冲突处理：git add <文件> && git rebase --continue；放弃：git rebase --abort
+# 建议 study 提交分层：docs / 注释 / dev 剥离 分开 commit，便于逐个 skip 或重做。
+# 未提交改动会先 stash，rebase 成功后 stash pop（pop 时也可能冲突）。
 sync-all:
     #!/usr/bin/env bash
     set -euo pipefail
