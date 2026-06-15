@@ -1,14 +1,12 @@
-import { type VNode, type VNodeChild, isVNode } from './vnode'
+import { type VNode, type VNodeChild } from './vnode'
 import {
   EffectScope,
   type ReactiveEffect,
   TrackOpTypes,
-  isRef,
   markRaw,
   pauseTracking,
   proxyRefs,
   resetTracking,
-  shallowReadonly,
   track,
 } from '@vue/reactivity'
 import {
@@ -16,9 +14,6 @@ import {
   type ComponentPublicInstanceConstructor,
   PublicInstanceProxyHandlers,
   RuntimeCompiledPublicInstanceProxyHandlers,
-  createDevRenderContext,
-  exposePropsOnRenderContext,
-  exposeSetupStateOnRenderContext,
   publicPropertiesMap,
 } from './componentPublicInstance'
 import {
@@ -41,7 +36,7 @@ import {
   type AppContext,
   createAppContext,
 } from './apiCreateApp'
-import { type Directive, validateDirectiveName } from './directives'
+import { type Directive } from './directives'
 import {
   type ComponentOptions,
   type ComputedOptions,
@@ -66,7 +61,6 @@ import {
   ShapeFlags,
   extend,
   getGlobalThis,
-  isArray,
   isFunction,
   isObject,
   isPromise,
@@ -74,14 +68,11 @@ import {
 } from '@vue/shared'
 import type { SuspenseBoundary } from './components/Suspense'
 import type { CompilerOptions } from '@vue/compiler-core'
-import { markAttrsAccessed } from './componentRenderUtils'
 import { currentRenderingInstance } from './componentRenderContext'
-import { endMeasure, startMeasure } from './profiling'
 import { convertLegacyRenderFn } from './compat/renderFn'
 import {
   type CompatConfig,
   globalCompatConfig,
-  validateCompatConfig,
 } from './compat/compatConfig'
 import type { SchedulerJob } from './scheduler'
 import type { LifecycleHooks } from './enums'
@@ -699,11 +690,7 @@ export function createComponentInstance(
     ec: null,
     sp: null,
   }
-  if (__DEV__) {
-    instance.ctx = createDevRenderContext(instance)
-  } else {
-    instance.ctx = { _: instance }
-  }
+  instance.ctx = { _: instance }
   instance.root = parent ? parent.root : instance
   instance.emit = emit.bind(null, instance)
 
@@ -832,37 +819,10 @@ function setupStatefulComponent(
 ) {
   const Component = instance.type as ComponentOptions
 
-  if (__DEV__) {
-    if (Component.name) {
-      validateComponentName(Component.name, instance.appContext.config)
-    }
-    if (Component.components) {
-      const names = Object.keys(Component.components)
-      for (let i = 0; i < names.length; i++) {
-        validateComponentName(names[i], instance.appContext.config)
-      }
-    }
-    if (Component.directives) {
-      const names = Object.keys(Component.directives)
-      for (let i = 0; i < names.length; i++) {
-        validateDirectiveName(names[i])
-      }
-    }
-    if (Component.compilerOptions && isRuntimeOnly()) {
-      warn(
-        `"compilerOptions" is only supported when using a build of Vue that ` +
-          `includes the runtime compiler. Since you are using a runtime-only ` +
-          `build, the options should be passed via your build tool config instead.`,
-      )
-    }
-  }
   // 0. create render proxy property access cache
   instance.accessCache = Object.create(null)
   // 1. create public instance / render proxy
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
-  if (__DEV__) {
-    exposePropsOnRenderContext(instance)
-  }
   // 2. call setup()
   const { setup } = Component
   if (setup) {
@@ -875,7 +835,7 @@ function setupStatefulComponent(
       instance,
       ErrorCodes.SETUP_FUNCTION,
       [
-        __DEV__ ? shallowReadonly(instance.props) : instance.props,
+        instance.props,
         setupContext,
       ],
     )
@@ -908,20 +868,6 @@ function setupStatefulComponent(
         // async setup returned Promise.
         // bail here and wait for re-entry.
         instance.asyncDep = setupResult
-        if (__DEV__ && !instance.suspense) {
-          const name = formatComponentName(instance, Component)
-          warn(
-            `Component <${name}>: setup function returned a promise, but no ` +
-              `<Suspense> boundary was found in the parent component tree. ` +
-              `A component with async setup() must be nested in a <Suspense> ` +
-              `in order to be rendered.`,
-          )
-        }
-      } else if (__DEV__) {
-        warn(
-          `setup() returned a Promise, but the version of Vue you are using ` +
-            `does not support it yet.`,
-        )
       }
     } else {
       handleSetupResult(instance, setupResult, isSSR)
@@ -946,27 +892,12 @@ export function handleSetupResult(
       instance.render = setupResult as InternalRenderFunction
     }
   } else if (isObject(setupResult)) {
-    if (__DEV__ && isVNode(setupResult)) {
-      warn(
-        `setup() should not return VNodes directly - ` +
-          `return a render function instead.`,
-      )
-    }
     // setup returned bindings.
     // assuming a render function compiled from template is present.
-    if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    if (__FEATURE_PROD_DEVTOOLS__) {
       instance.devtoolsRawSetupState = setupResult
     }
     instance.setupState = proxyRefs(setupResult)
-    if (__DEV__) {
-      exposeSetupStateOnRenderContext(instance)
-    }
-  } else if (__DEV__ && setupResult !== undefined) {
-    warn(
-      `setup() should return an object. Received: ${
-        setupResult === null ? 'null' : typeof setupResult
-      }`,
-    )
   }
   finishComponentSetup(instance, isSSR)
 }
@@ -1004,10 +935,6 @@ export function finishComponentSetup(
 
   if (__COMPAT__) {
     convertLegacyRenderFn(instance)
-
-    if (__DEV__ && Component.compatConfig) {
-      validateCompatConfig(Component.compatConfig)
-    }
   }
 
   // template / render function normalization
@@ -1023,9 +950,6 @@ export function finishComponentSetup(
         Component.template ||
         (__FEATURE_OPTIONS_API__ && resolveMergedOptions(instance).template)
       if (template) {
-        if (__DEV__) {
-          startMeasure(instance, `compile`)
-        }
         const { isCustomElement, compilerOptions } = instance.appContext.config
         const { delimiters, compilerOptions: componentCompilerOptions } =
           Component
@@ -1048,9 +972,6 @@ export function finishComponentSetup(
           }
         }
         Component.render = compile(template, finalCompilerOptions)
-        if (__DEV__) {
-          endMeasure(instance, `compile`)
-        }
       }
     }
 
@@ -1076,118 +997,27 @@ export function finishComponentSetup(
     }
   }
 
-  // warn missing template/render
-  // the runtime compilation of template in SSR is done by server-render
-  if (__DEV__ && !Component.render && instance.render === NOOP && !isSSR) {
-    if (!compile && Component.template) {
-      /* v8 ignore start */
-      warn(
-        `Component provided template option but ` +
-          `runtime compilation is not supported in this build of Vue.` +
-          (__ESM_BUNDLER__
-            ? ` Configure your bundler to alias "vue" to "vue/dist/vue.esm-bundler.js".`
-            : __ESM_BROWSER__
-              ? ` Use "vue.esm-browser.js" instead.`
-              : __GLOBAL__
-                ? ` Use "vue.global.js" instead.`
-                : ``) /* should not happen */,
-      )
-      /* v8 ignore stop */
-    } else {
-      warn(`Component is missing template or render function: `, Component)
-    }
-  }
 }
 
-const attrsProxyHandlers = __DEV__
-  ? {
-      get(target: Data, key: string) {
-        markAttrsAccessed()
-        track(target, TrackOpTypes.GET, '')
-        return target[key]
-      },
-      set() {
-        warn(`setupContext.attrs is readonly.`)
-        return false
-      },
-      deleteProperty() {
-        warn(`setupContext.attrs is readonly.`)
-        return false
-      },
-    }
-  : {
-      get(target: Data, key: string) {
-        track(target, TrackOpTypes.GET, '')
-        return target[key]
-      },
-    }
-
-/**
- * Dev-only
- */
-function getSlotsProxy(instance: ComponentInternalInstance): Slots {
-  return new Proxy(instance.slots, {
-    get(target, key: string) {
-      track(instance, TrackOpTypes.GET, '$slots')
-      return target[key]
-    },
-  })
+const attrsProxyHandlers = {
+  get(target: Data, key: string) {
+    track(target, TrackOpTypes.GET, '')
+    return target[key]
+  },
 }
 
 export function createSetupContext(
   instance: ComponentInternalInstance,
 ): SetupContext {
   const expose: SetupContext['expose'] = exposed => {
-    if (__DEV__) {
-      if (instance.exposed) {
-        warn(`expose() should be called only once per setup().`)
-      }
-      if (exposed != null) {
-        let exposedType: string = typeof exposed
-        if (exposedType === 'object') {
-          if (isArray(exposed)) {
-            exposedType = 'array'
-          } else if (isRef(exposed)) {
-            exposedType = 'ref'
-          }
-        }
-        if (exposedType !== 'object') {
-          warn(
-            `expose() should be passed a plain object, received ${exposedType}.`,
-          )
-        }
-      }
-    }
     instance.exposed = exposed || {}
   }
 
-  if (__DEV__) {
-    // We use getters in dev in case libs like test-utils overwrite instance
-    // properties (overwrites should not be done in prod)
-    let attrsProxy: Attrs
-    let slotsProxy: Slots
-    return Object.freeze({
-      get attrs() {
-        return (
-          attrsProxy ||
-          (attrsProxy = new Proxy(instance.attrs, attrsProxyHandlers) as Attrs)
-        )
-      },
-      get slots() {
-        return slotsProxy || (slotsProxy = getSlotsProxy(instance))
-      },
-      get emit() {
-        return (event: string, ...args: any[]) => instance.emit(event, ...args)
-      },
-      expose,
-    })
-  } else {
-    return {
-      attrs: new Proxy(instance.attrs, attrsProxyHandlers) as Attrs,
-      slots: instance.slots,
-      emit: instance.emit,
-      expose,
-    }
+  return {
+    attrs: new Proxy(instance.attrs, attrsProxyHandlers) as Attrs,
+    slots: instance.slots,
+    emit: instance.emit,
+    expose,
   }
 }
 
