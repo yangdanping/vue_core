@@ -1,8 +1,7 @@
-import { extend, isArray, isIntegerKey, isMap, isSymbol } from '@vue/shared'
+import { isArray, isIntegerKey, isMap, isSymbol } from '@vue/shared'
 import type { ComputedRefImpl } from './computed'
 import { type TrackOpTypes, TriggerOpTypes } from './constants'
 import {
-  type DebuggerEventExtraInfo,
   EffectFlags,
   type Subscriber,
   activeSub,
@@ -77,12 +76,6 @@ export class Dep {
   subs?: Link = undefined
 
   /**
-   * Doubly linked list representing the subscribing effects (head)
-   * DEV only, for invoking onTrigger hooks in correct order
-   */
-  subsHead?: Link
-
-  /**
    * For object property deps cleanup
    */
   map?: KeyToDepMap = undefined
@@ -99,13 +92,9 @@ export class Dep {
   readonly __v_skip = true
   // TODO isolatedDeclarations ReactiveFlags.SKIP
 
-  constructor(public computed?: ComputedRefImpl | undefined) {
-    if (__DEV__) {
-      this.subsHead = undefined
-    }
-  }
+  constructor(public computed?: ComputedRefImpl | undefined) {}
 
-  track(debugInfo?: DebuggerEventExtraInfo): Link | undefined {
+  track(): Link | undefined {
     if (!activeSub || !shouldTrack || activeSub === this.computed) {
       return
     }
@@ -150,46 +139,18 @@ export class Dep {
       }
     }
 
-    if (__DEV__ && activeSub.onTrack) {
-      activeSub.onTrack(
-        extend(
-          {
-            effect: activeSub,
-          },
-          debugInfo,
-        ),
-      )
-    }
-
     return link
   }
 
-  trigger(debugInfo?: DebuggerEventExtraInfo): void {
+  trigger(): void {
     this.version++
     globalVersion++
-    this.notify(debugInfo)
+    this.notify()
   }
 
-  notify(debugInfo?: DebuggerEventExtraInfo): void {
+  notify(): void {
     startBatch()
     try {
-      if (__DEV__) {
-        // subs are notified and batched in reverse-order and then invoked in
-        // original order at the end of the batch, but onTrigger hooks should
-        // be invoked in original order here.
-        for (let head = this.subsHead; head; head = head.nextSub) {
-          if (head.sub.onTrigger && !(head.sub.flags & EffectFlags.NOTIFIED)) {
-            head.sub.onTrigger(
-              extend(
-                {
-                  effect: head.sub,
-                },
-                debugInfo,
-              ),
-            )
-          }
-        }
-      }
       for (let link = this.subs; link; link = link.prevSub) {
         if (link.sub.notify()) {
           // if notify() returns `true`, this is a computed. Also call notify
@@ -223,10 +184,6 @@ function addSub(link: Link) {
       if (currentTail) currentTail.nextSub = link
     }
 
-    if (__DEV__ && link.dep.subsHead === undefined) {
-      link.dep.subsHead = link
-    }
-
     link.dep.subs = link
   }
 }
@@ -239,15 +196,9 @@ type KeyToDepMap = Map<any, Dep>
 
 export const targetMap: WeakMap<object, KeyToDepMap> = new WeakMap()
 
-export const ITERATE_KEY: unique symbol = Symbol(
-  __DEV__ ? 'Object iterate' : '',
-)
-export const MAP_KEY_ITERATE_KEY: unique symbol = Symbol(
-  __DEV__ ? 'Map keys iterate' : '',
-)
-export const ARRAY_ITERATE_KEY: unique symbol = Symbol(
-  __DEV__ ? 'Array iterate' : '',
-)
+export const ITERATE_KEY: unique symbol = Symbol('')
+export const MAP_KEY_ITERATE_KEY: unique symbol = Symbol('')
+export const ARRAY_ITERATE_KEY: unique symbol = Symbol('')
 
 /**
  * Tracks access to a reactive property.
@@ -271,15 +222,7 @@ export function track(target: object, type: TrackOpTypes, key: unknown): void {
       dep.map = depsMap
       dep.key = key
     }
-    if (__DEV__) {
-      dep.track({
-        target,
-        type,
-        key,
-      })
-    } else {
-      dep.track()
-    }
+    dep.track()
   }
 }
 
@@ -308,18 +251,7 @@ export function trigger(
 
   const run = (dep: Dep | undefined) => {
     if (dep) {
-      if (__DEV__) {
-        dep.trigger({
-          target,
-          type,
-          key,
-          newValue,
-          oldValue,
-          oldTarget,
-        })
-      } else {
-        dep.trigger()
-      }
+      dep.trigger()
     }
   }
 

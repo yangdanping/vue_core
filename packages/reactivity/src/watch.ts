@@ -10,7 +10,6 @@ import {
   isSet,
   remove,
 } from '@vue/shared'
-import { warn } from './warning'
 import type { ComputedRef } from './computed'
 import { ReactiveFlags } from './constants'
 import {
@@ -109,11 +108,6 @@ export function onWatcherCleanup(
     let cleanups = cleanupMap.get(owner)
     if (!cleanups) cleanupMap.set(owner, (cleanups = []))
     cleanups.push(cleanupFn)
-  } else if (__DEV__ && !failSilently) {
-    warn(
-      `onWatcherCleanup() was called when there was no active watcher` +
-        ` to associate with.`,
-    )
   }
 }
 
@@ -123,15 +117,6 @@ export function watch(
   options: WatchOptions = EMPTY_OBJ,
 ): WatchHandle {
   const { immediate, deep, once, scheduler, augmentJob, call } = options
-
-  const warnInvalidSource = (s: unknown) => {
-    ;(options.onWarn || warn)(
-      `Invalid watch source: `,
-      s,
-      `A watch source can only be a getter/effect function, a ref, ` +
-        `a reactive object, or an array of these types.`,
-    )
-  }
 
   const reactiveGetter = (source: object) => {
     // traverse will happen in wrapped getter below
@@ -167,8 +152,6 @@ export function watch(
           return reactiveGetter(s)
         } else if (isFunction(s)) {
           return call ? call(s, WatchErrorCodes.WATCH_GETTER) : s()
-        } else {
-          __DEV__ && warnInvalidSource(s)
         }
       })
   } else if (isFunction(source)) {
@@ -201,7 +184,6 @@ export function watch(
     }
   } else {
     getter = NOOP
-    __DEV__ && warnInvalidSource(source)
   }
 
   if (cb && deep) {
@@ -303,11 +285,6 @@ export function watch(
       }
       cleanupMap.delete(effect)
     }
-  }
-
-  if (__DEV__) {
-    effect.onTrack = options.onTrack
-    effect.onTrigger = options.onTrigger
   }
 
   // initial run
