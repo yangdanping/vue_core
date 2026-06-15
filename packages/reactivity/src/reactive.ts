@@ -13,7 +13,6 @@ import {
 } from './collectionHandlers'
 import type { RawSymbol, Ref, UnwrapRefSimple } from './ref'
 import { ReactiveFlags } from './constants'
-import { warn } from './warning'
 
 export interface Target {
   [ReactiveFlags.SKIP]?: boolean
@@ -279,13 +278,6 @@ function createReactiveObject(
 ) {
   // 如果不是一个对象 则 返回当前 traget
   if (!isObject(target)) {
-    if (__DEV__) {
-      warn(
-        `value cannot be made ${isReadonly ? 'readonly' : 'reactive'}: ${String(
-          target,
-        )}`,
-      )
-    }
     return target
   }
   // target is already a Proxy, return it. // target 已是代理，直接返回。

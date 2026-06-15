@@ -23,7 +23,6 @@ import {
   makeMap,
 } from '@vue/shared'
 import { isRef } from './ref'
-import { warn } from './warning'
 
 const isNonTrackableKeys = /*@__PURE__*/ makeMap(`__proto__,__v_isRef,__isVue`)
 
@@ -110,7 +109,7 @@ class BaseReactiveHandler implements ProxyHandler<Target> {
     }
 
     if (!isReadonly) {
-      track(target, TrackOpTypes.GET, key)
+      track(target, TrackOpTypes.GET, key) // 读 → 收集依赖
     }
 
     if (isShallow) {
@@ -155,12 +154,6 @@ class MutableReactiveHandler extends BaseReactiveHandler {
       }
       if (!isArrayWithIntegerKey && isRef(oldValue) && !isRef(value)) {
         if (isOldValueReadonly) {
-          if (__DEV__) {
-            warn(
-              `Set operation on key "${String(key)}" failed: target is readonly.`,
-              target[key],
-            )
-          }
           return true
         } else {
           oldValue.value = value
@@ -183,9 +176,9 @@ class MutableReactiveHandler extends BaseReactiveHandler {
     // don't trigger if target is something up in the prototype chain of original
     if (target === toRaw(receiver) && result) {
       if (!hadKey) {
-        trigger(target, TriggerOpTypes.ADD, key, value)
+        trigger(target, TriggerOpTypes.ADD, key, value) // 写 → 触发更新
       } else if (hasChanged(value, oldValue)) {
-        trigger(target, TriggerOpTypes.SET, key, value, oldValue)
+        trigger(target, TriggerOpTypes.SET, key, value, oldValue) // 写 → 触发更新
       }
     }
     return result
@@ -228,22 +221,10 @@ class ReadonlyReactiveHandler extends BaseReactiveHandler {
   }
 
   set(target: object, key: string | symbol) {
-    if (__DEV__) {
-      warn(
-        `Set operation on key "${String(key)}" failed: target is readonly.`,
-        target,
-      )
-    }
     return true
   }
 
   deleteProperty(target: object, key: string | symbol) {
-    if (__DEV__) {
-      warn(
-        `Delete operation on key "${String(key)}" failed: target is readonly.`,
-        target,
-      )
-    }
     return true
   }
 }

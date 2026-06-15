@@ -20,8 +20,7 @@ import {
   toReactive,
 } from './reactive'
 import type { ComputedRef, WritableComputedRef } from './computed'
-import { ReactiveFlags, TrackOpTypes, TriggerOpTypes } from './constants'
-import { warn } from './warning'
+import { ReactiveFlags } from './constants'
 
 declare const RefSymbol: unique symbol
 export declare const RawSymbol: unique symbol
@@ -188,16 +187,7 @@ class RefImpl<T = any> {
 export function triggerRef(ref: Ref): void {
   // ref may be an instance of ObjectRefImpl
   if ((ref as unknown as RefImpl).dep) {
-    if (__DEV__) {
-      ;(ref as unknown as RefImpl).dep.trigger({
-        target: ref,
-        type: TriggerOpTypes.SET,
-        key: 'value',
-        newValue: (ref as unknown as RefImpl)._value,
-      })
-    } else {
-      ;(ref as unknown as RefImpl).dep.trigger()
-    }
+    ;(ref as unknown as RefImpl).dep.trigger()
   }
 }
 
@@ -355,9 +345,6 @@ type ToRefValue<T extends object, K extends ToRefKey<T>> = K extends keyof T
  */
 /*@__NO_SIDE_EFFECTS__*/
 export function toRefs<T extends object>(object: T): ToRefs<T> {
-  if (__DEV__ && !isProxy(object)) {
-    warn(`toRefs() expects a reactive object but received a plain one.`)
-  }
   const ret: any = isArray(object) ? new Array(object.length) : {}
   for (const key in object) {
     ret[key] = propertyToRef(object, key)

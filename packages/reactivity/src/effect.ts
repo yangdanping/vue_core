@@ -3,7 +3,6 @@ import type { ComputedRefImpl } from './computed'
 import type { TrackOpTypes, TriggerOpTypes } from './constants'
 import { type Link, globalVersion } from './dep'
 import { activeEffectScope } from './effectScope'
-import { warn } from './warning'
 
 export type EffectScheduler = (...args: any[]) => any
 
@@ -178,12 +177,6 @@ export class ReactiveEffect<T = any>
     try {
       return this.fn()
     } finally {
-      if (__DEV__ && activeSub !== this) {
-        warn(
-          'Active effect was not restored correctly - ' +
-            'this is likely a Vue internal bug.',
-        )
-      }
       cleanupDeps(this)
       activeSub = prevEffect
       shouldTrack = prevShouldTrack
@@ -439,11 +432,6 @@ function removeSub(link: Link, soft = false) {
     nextSub.prevSub = prevSub
     link.nextSub = undefined
   }
-  if (__DEV__ && dep.subsHead === link) {
-    // was previous head, point new head to next
-    dep.subsHead = nextSub
-  }
-
   if (dep.subs === link) {
     // was previous tail, point new tail to prev
     dep.subs = prevSub
@@ -558,11 +546,6 @@ export function resetTracking(): void {
 export function onEffectCleanup(fn: () => void, failSilently = false): void {
   if (activeSub instanceof ReactiveEffect) {
     activeSub.cleanup = fn
-  } else if (__DEV__ && !failSilently) {
-    warn(
-      `onEffectCleanup() was called when there was no active effect` +
-        ` to associate with.`,
-    )
   }
 }
 

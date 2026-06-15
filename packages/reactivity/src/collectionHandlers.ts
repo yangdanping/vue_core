@@ -224,11 +224,7 @@ function createInstrumentations(
           // clear(this: IterableCollections) {
           //   const target = toRaw(this)
           //   const hadItems = target.size !== 0
-          //   const oldTarget = __DEV__
-          //     ? isMap(target)
-          //       ? new Map(target)
-          //       : new Set(target)
-          //     : undefined
+          //   const oldTarget = undefined
           //   // forward the operation before queueing reactions
           //   const result = target.clear()
           //   if (hadItems) {

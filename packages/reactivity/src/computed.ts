@@ -1,6 +1,5 @@
 import { isFunction } from '@vue/shared'
 import {
-  type DebuggerEvent,
   type DebuggerOptions,
   EffectFlags,
   type Subscriber,
@@ -9,9 +8,8 @@ import {
   refreshComputed,
 } from './effect'
 import type { Ref } from './ref'
-import { warn } from './warning'
 import { Dep, type Link, globalVersion } from './dep'
-import { ReactiveFlags, TrackOpTypes } from './constants'
+import { ReactiveFlags } from './constants'
 
 declare const ComputedRefSymbol: unique symbol
 declare const WritableComputedRefSymbol: unique symbol
@@ -91,16 +89,6 @@ export class ComputedRefImpl<T = any> implements Subscriber {
 
   // for backwards compat
   effect: this = this
-  // dev only
-  onTrack?: (event: DebuggerEvent) => void
-  // dev only
-  onTrigger?: (event: DebuggerEvent) => void
-
-  /**
-   * Dev only
-   * @internal
-   */
-  _warnRecursive?: boolean
 
   constructor(
     public fn: ComputedGetter<T>,
@@ -123,19 +111,11 @@ export class ComputedRefImpl<T = any> implements Subscriber {
     ) {
       batch(this, true)
       return true
-    } else if (__DEV__) {
-      // TODO warn
     }
   }
 
   get value(): T {
-    const link = __DEV__
-      ? this.dep.track({
-          target: this,
-          type: TrackOpTypes.GET,
-          key: 'value',
-        })
-      : this.dep.track()
+    const link = this.dep.track()
     refreshComputed(this)
     // sync version after evaluation
     if (link) {
@@ -147,8 +127,6 @@ export class ComputedRefImpl<T = any> implements Subscriber {
   set value(newValue) {
     if (this.setter) {
       this.setter(newValue)
-    } else if (__DEV__) {
-      warn('Write operation failed: computed value is readonly')
     }
   }
 }
@@ -211,11 +189,6 @@ export function computed<T>(
   }
 
   const cRef = new ComputedRefImpl(getter, setter, isSSR)
-
-  if (__DEV__ && debugOptions && !isSSR) {
-    cRef.onTrack = debugOptions.onTrack
-    cRef.onTrigger = debugOptions.onTrigger
-  }
 
   return cRef as any
 }
