@@ -206,6 +206,9 @@ export const ARRAY_ITERATE_KEY: unique symbol = Symbol('')
  * This will check which effect is running at the moment and record it as dep
  * which records all effects that depend on the reactive property.
  *
+ * 追踪对响应式属性的访问。
+ * 检查当前正在运行的 effect，将其记录为 dep；dep 会记录所有依赖该响应式属性的 effect。
+ *
  * @param target - Object holding the reactive property.
  * @param type - Defines the type of access to the reactive property.
  * @param key - Identifier of the reactive property to track.
@@ -229,6 +232,29 @@ export function track(target: object, type: TrackOpTypes, key: unknown): void {
 /**
  * Finds all deps associated with the target (or a specific property) and
  * triggers the effects stored within.
+ *
+ * 查找与 target（或某个具体属性）关联的所有 dep，并触发其中存储的 effect。
+ *
+ * 通俗理解：数据「写完了」之后，通知所有「用过这份数据」的 effect 重新执行。
+ * 以 TriggerOpTypes.ADD 为例：给响应式对象新增属性（如 obj.x = 1，之前没有 x），
+ * 或 Map 新增键（map.set('新key', val)）时，baseHandlers / collectionHandlers 会调用
+ * trigger(target, TriggerOpTypes.ADD, key)。trigger 据此找出曾经 track 过该 target、
+ * 该 key、或「遍历过该对象」（ITERATE_KEY）的 effect，逐一触发更新。
+ * 示例（obj.x = 1，之前没有 x）：
+ *   obj.x = 1
+ *   → Proxy set（baseHandlers MutableReactiveHandler.set）
+ *   → Reflect.set(...)                              ←  ✅ 属性在这里已经写入，trigger 不负责写
+ *   → hadKey === false
+ *   → trigger(target, TriggerOpTypes.ADD, 'x', value)   ← 通知入口
+ *   → run(depsMap.get('x'))                             ← 293 行，通知依赖 key 为 x 的
+ *   → switch ADD → run(depsMap.get(ITERATE_KEY))        ← 305 行，通知 v-for 遍历过该对象的
+ *   → dep.trigger() → notify()                          ← run 内调用；Dep 是依赖桶，不是 obj
+ *   → computed / watch / 组件 render 重跑 → 视图更新     ← 底层 ReactiveEffect；DOM 补丁不在 dep.ts
+ *
+ * 视图更新的关键代码：dep.notify()（dep.ts）→ ReactiveEffect.notify()（effect.ts）
+ * → scheduler / run（effect.ts）→ 组件侧 queueJob（runtime-core/renderer.ts）→ patch DOM。
+ *
+ * 注意：run 只是 trigger 内部的薄封装（有 dep 就 dep.trigger()）；ADD 除 305 行外，293 行也会 run(key)。
  *
  * @param target - The reactive object.
  * @param type - Defines the type of the operation that needs to trigger effects.

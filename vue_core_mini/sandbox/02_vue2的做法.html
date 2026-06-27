@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script src="./utils.js"></script>
+    <script>
+      /*
+       * 本讲作用：Vue 2 用 Object.defineProperty 为属性添加 getter/setter——
+       * 读取时收集依赖，修改时自动触发 effect，无需像上节那样手动调用。
+       *
+       * 弊端：
+       * 1. Object.defineProperty 只可以监听 指定对象 的 指定属性 的 getter 和 setter
+       * 2. 被监听了 getter 和 setter 的属性，就被叫做 该属性具备了响应性
+       * 那么这就意味着：我们 必须要知道指定对象中存在该属性，才可以为该属性指定响应性。
+       * 但是 由于 JavaScript 的限制，我们没有办法监听 到 指定对象新增了一个属性，所以新增的属性就没有办法通过 Object.defineProperty 来监听 getter 和 setter，所以 新增的属性将失去响应性
+       */
+
+      // 依赖收集（Vue 3 同名）：effect 读取属性时在 getter 里调用，建立「属性 → effect」映射
+      // Vue 3 也有 track / trigger，概念不变，只是拦截方式从 getter/setter 换成了 Proxy 的 get/set trap；访问时才收集依赖，不必一开始就遍历所有 key。
+      // Vue 2 核心：初始化时需 Object.keys 遍历，逐个 defineProperty（新增/删除属性无法感知）
+      function reactive(obj) {
+        Object.keys(obj).forEach(key => {
+          let value = obj[key];
+          Object.defineProperty(obj, key, {
+            get() {
+              track(obj, key);
+              return value;
+            },
+            set(newVal) {
+              value = newVal;
+              trigger(obj, key);
+            }
+          });
+        });
+        return obj;
+      }
+
+      // --- 与上节相同的例子 ---
+      let product = reactive({
+        price: 10,
+        quantity: 2
+      });
+
+      let total = 0;
+
+      effect(() => {
+        total = product.price * product.quantity;
+      });
+
+      console.log(`总价格: ${total}`); // 20
+
+      // 修改 quantity 时，setter 自动触发 effect，total 随之更新
+      product.quantity = 5;
+
+      console.log(`总价格: ${total}`); // 50
+    </script>
+  </body>
+</html>
