@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>reactive & effect 测试</title>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script src="../../../dist/vue.global.js"></script>
+    <script>
+      const { reactive, effect } = Vue
+
+      const obj = reactive({
+        name: 'ydp',
+      })
+
+      effect(() => {
+        document.querySelector('#app').innerText = obj.name
+      })
+
+      setTimeout(() => {
+        obj.name = '李四'
+      }, 2000)
+    </script>
+  </body>
+</html>

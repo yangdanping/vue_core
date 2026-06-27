@@ -22,7 +22,6 @@ import {
   setupComponent,
 } from './component'
 import {
-  filterSingleRoot,
   renderComponentRoot,
   shouldUpdateComponent,
   updateHOCHostEl,
@@ -33,7 +32,6 @@ import {
   NOOP,
   PatchFlags,
   ShapeFlags,
-  def,
   getGlobalThis,
   invokeArrayFns,
   isArray,
@@ -56,7 +54,6 @@ import {
 } from '@vue/reactivity'
 import { updateProps } from './componentProps'
 import { updateSlots } from './componentSlots'
-import { popWarningContext, pushWarningContext, warn } from './warning'
 import { type CreateAppFunction, createAppAPI } from './apiCreateApp'
 import { setRef } from './rendererTemplateRef'
 import {
@@ -71,21 +68,8 @@ import {
   type TeleportVNode,
 } from './components/Teleport'
 import { type KeepAliveContext, isKeepAlive } from './components/KeepAlive'
-import {
-  isHmrUpdating,
-  registerHMR,
-  setHmrUpdating,
-  unregisterHMR,
-} from './hmr'
 import { type RootHydrateFunction, createHydrationFunctions } from './hydration'
 import { invokeDirectiveHook } from './directives'
-import { endMeasure, startMeasure } from './profiling'
-import {
-  devtoolsComponentAdded,
-  devtoolsComponentRemoved,
-  devtoolsComponentUpdated,
-  setDevtoolsHook,
-} from './devtools'
 import { initFeatureFlags } from './featureFlags'
 import { isAsyncWrapper } from './apiAsyncComponent'
 import { isCompatEnabled } from './compat/compatConfig'
@@ -355,9 +339,6 @@ function baseCreateRenderer(
 
   const target = getGlobalThis()
   target.__VUE__ = true
-  if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-    setDevtoolsHook(target.__VUE_DEVTOOLS_GLOBAL_HOOK__, target)
-  }
 
   const {
     insert: hostInsert,
@@ -385,7 +366,7 @@ function baseCreateRenderer(
     parentSuspense = null,
     namespace = undefined,
     slotScopeIds = null,
-    optimized = __DEV__ && isHmrUpdating ? false : !!n2.dynamicChildren,
+    optimized = !!n2.dynamicChildren,
   ) => {
     // 相等则直接复用
     if (n1 === n2) {
@@ -428,8 +409,6 @@ function baseCreateRenderer(
       case Static:
         if (n1 == null) {
           mountStaticNode(n2, container, anchor, namespace)
-        } else if (__DEV__) {
-          patchStaticNode(n1, n2, container, namespace)
         }
         break
       case Fragment:
@@ -496,8 +475,6 @@ function baseCreateRenderer(
             optimized,
             internals,
           )
-        } else if (__DEV__) {
-          warn('Invalid VNode type:', type, `(${typeof type})`)
         }
     }
 
@@ -558,33 +535,6 @@ function baseCreateRenderer(
       n2.el,
       n2.anchor,
     )
-  }
-
-  /**
-   * Dev / HMR only
-   */
-  const patchStaticNode = (
-    n1: VNode,
-    n2: VNode,
-    container: RendererElement,
-    namespace: ElementNamespace,
-  ) => {
-    // static nodes are only patched during dev for HMR
-    if (n2.children !== n1.children) {
-      const anchor = hostNextSibling(n1.anchor!)
-      // remove existing
-      removeStaticNode(n1)
-      // insert new
-      ;[n2.el, n2.anchor] = hostInsertStaticContent!(
-        n2.children as string,
-        container,
-        anchor,
-        namespace,
-      )
-    } else {
-      n2.el = n1.el
-      n2.anchor = n1.anchor
-    }
   }
 
   const moveStaticNode = (
@@ -732,11 +682,6 @@ function baseCreateRenderer(
       }
     }
 
-    if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-      def(el, '__vnode', vnode, true)
-      def(el, '__vueParentComponent', parentComponent, true)
-    }
-
     if (dirs) {
       invokeDirectiveHook(vnode, null, parentComponent, 'beforeMount')
     }
@@ -752,17 +697,10 @@ function baseCreateRenderer(
       needCallTransitionHooks ||
       dirs
     ) {
-      const isHmr = __DEV__ && isHmrUpdating
       queuePostRenderEffect(() => {
-        let prev
-        if (__DEV__) prev = setHmrUpdating(isHmr)
-        try {
-          vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
-          needCallTransitionHooks && transition!.enter(el)
-          dirs && invokeDirectiveHook(vnode, null, parentComponent, 'mounted')
-        } finally {
-          if (__DEV__) setHmrUpdating(prev!)
-        }
+        vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
+        needCallTransitionHooks && transition!.enter(el)
+        dirs && invokeDirectiveHook(vnode, null, parentComponent, 'mounted')
       }, parentSuspense)
     }
   }
@@ -783,15 +721,7 @@ function baseCreateRenderer(
       }
     }
     if (parentComponent) {
-      let subTree = parentComponent.subTree
-      if (
-        __DEV__ &&
-        subTree.patchFlag > 0 &&
-        subTree.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT
-      ) {
-        subTree =
-          filterSingleRoot(subTree.children as VNodeArrayChildren) || subTree
-      }
+      const subTree = parentComponent.subTree
       if (
         vnode === subTree ||
         (isSuspense(subTree.type) &&
@@ -848,9 +778,6 @@ function baseCreateRenderer(
     optimized: boolean,
   ) => {
     const el = (n2.el = n1.el!)
-    if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-      el.__vnode = n2
-    }
     // 对比时,先标记需要变化的元素,用patchFlag
     let { patchFlag, dynamicChildren, dirs } = n2
     // #1426 take the old vnode's patch flag into account since user may clone a
@@ -1261,14 +1188,8 @@ function baseCreateRenderer(
         // since the component's reactive effect for render isn't set-up yet.
         // carry over the el adopted during hydration: if hydration is
         // interrupted, teardown of the claimed DOM depends on it
-        if (__DEV__) {
-          pushWarningContext(n2)
-        }
         n2.el = n1.el
         updateComponentPreRender(instance, n2, optimized)
-        if (__DEV__) {
-          popWarningContext()
-        }
         return
       } else {
         // normal update
@@ -1322,16 +1243,7 @@ function baseCreateRenderer(
         if (el && hydrateNode) {
           // vnode has adopted host node - perform hydration instead of mount.
           const hydrateSubTree = () => {
-            if (__DEV__) {
-              startMeasure(instance, `render`)
-            }
             instance.subTree = renderComponentRoot(instance)
-            if (__DEV__) {
-              endMeasure(instance, `render`)
-            }
-            if (__DEV__) {
-              startMeasure(instance, `hydrate`)
-            }
             hydrateNode!(
               el as Node,
               instance.subTree,
@@ -1339,9 +1251,6 @@ function baseCreateRenderer(
               parentSuspense,
               null,
             )
-            if (__DEV__) {
-              endMeasure(instance, `hydrate`)
-            }
           }
 
           if (
@@ -1365,16 +1274,7 @@ function baseCreateRenderer(
             )
           }
 
-          if (__DEV__) {
-            startMeasure(instance, `render`)
-          }
           const subTree = (instance.subTree = renderComponentRoot(instance))
-          if (__DEV__) {
-            endMeasure(instance, `render`)
-          }
-          if (__DEV__) {
-            startMeasure(instance, `patch`)
-          }
           patch(
             null,
             subTree,
@@ -1384,9 +1284,6 @@ function baseCreateRenderer(
             parentSuspense,
             namespace,
           )
-          if (__DEV__) {
-            endMeasure(instance, `patch`)
-          }
           initialVNode.el = subTree.el
         }
         // mounted hook
@@ -1436,10 +1333,6 @@ function baseCreateRenderer(
         }
         instance.isMounted = true
 
-        if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-          devtoolsComponentAdded(instance)
-        }
-
         // #2458: deference mount-only object parameters to prevent memleaks
         initialVNode = container = anchor = null as any
       } else {
@@ -1471,9 +1364,6 @@ function baseCreateRenderer(
         // OR parent calling processComponent (next: VNode)
         let originNext = next
         let vnodeHook: VNodeHook | null | undefined
-        if (__DEV__) {
-          pushWarningContext(next || instance.vnode)
-        }
 
         // Disallow component effect recursion during pre-lifecycle hooks.
         toggleRecurse(instance, false)
@@ -1501,19 +1391,10 @@ function baseCreateRenderer(
         toggleRecurse(instance, true)
 
         // render
-        if (__DEV__) {
-          startMeasure(instance, `render`)
-        }
         const nextTree = renderComponentRoot(instance)
-        if (__DEV__) {
-          endMeasure(instance, `render`)
-        }
         const prevTree = instance.subTree
         instance.subTree = nextTree
 
-        if (__DEV__) {
-          startMeasure(instance, `patch`)
-        }
         patch(
           prevTree,
           nextTree,
@@ -1525,9 +1406,6 @@ function baseCreateRenderer(
           parentSuspense,
           namespace,
         )
-        if (__DEV__) {
-          endMeasure(instance, `patch`)
-        }
         next.el = nextTree.el
         if (originNext === null) {
           // self-triggered update. In case of HOC, update parent component
@@ -1555,14 +1433,6 @@ function baseCreateRenderer(
             parentSuspense,
           )
         }
-
-        if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-          devtoolsComponentUpdated(instance)
-        }
-
-        if (__DEV__) {
-          popWarningContext()
-        }
       }
     }
 
@@ -1580,15 +1450,6 @@ function baseCreateRenderer(
     // allowRecurse
     // #1801, #2043 component render effects should allow recursive updates
     toggleRecurse(instance, true)
-
-    if (__DEV__) {
-      effect.onTrack = instance.rtc
-        ? e => invokeArrayFns(instance.rtc!, e)
-        : void 0
-      effect.onTrigger = instance.rtg
-        ? e => invokeArrayFns(instance.rtg!, e)
-        : void 0
-    }
 
     update()
   }
@@ -1902,13 +1763,6 @@ function baseCreateRenderer(
           ? cloneIfMounted(c2[i] as VNode)
           : normalizeVNode(c2[i]))
         if (nextChild.key != null) {
-          if (__DEV__ && keyToNewIndexMap.has(nextChild.key)) {
-            warn(
-              `Duplicate keys found during update:`,
-              JSON.stringify(nextChild.key),
-              `Make sure keys are unique.`,
-            )
-          }
           keyToNewIndexMap.set(nextChild.key, i)
         }
       }
@@ -2247,23 +2101,7 @@ function baseCreateRenderer(
   const remove: RemoveFn = vnode => {
     const { type, el, anchor, transition } = vnode
     if (type === Fragment) {
-      if (
-        __DEV__ &&
-        vnode.patchFlag > 0 &&
-        vnode.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT &&
-        transition &&
-        !transition.persisted
-      ) {
-        ;(vnode.children as VNode[]).forEach(child => {
-          if (child.type === Comment) {
-            hostRemove(child.el!)
-          } else {
-            remove(child)
-          }
-        })
-      } else {
-        removeFragment(el!, anchor!)
-      }
+      removeFragment(el!, anchor!)
       return
     }
 
@@ -2318,10 +2156,6 @@ function baseCreateRenderer(
     parentSuspense: SuspenseBoundary | null,
     doRemove?: boolean,
   ) => {
-    if (__DEV__ && instance.type.__hmrId) {
-      unregisterHMR(instance)
-    }
-
     const { bum, scope, job, subTree, um, m, a } = instance
     invalidateMount(m)
     invalidateMount(a)
@@ -2370,10 +2204,6 @@ function baseCreateRenderer(
     queuePostRenderEffect(() => {
       instance.isUnmounted = true
     }, parentSuspense)
-
-    if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
-      devtoolsComponentRemoved(instance)
-    }
   }
 
   const unmountChildren: UnmountChildrenFn = (
@@ -2542,10 +2372,6 @@ export function traverseStaticChildren(
       // would have received .el during block patch)
       if (c2.type === Comment && !c2.el) {
         c2.el = c1.el
-      }
-
-      if (__DEV__) {
-        c2.el && (c2.el.__vnode = c2)
       }
     }
   }

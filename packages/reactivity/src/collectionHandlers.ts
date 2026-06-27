@@ -8,15 +8,12 @@ import {
 } from './reactive'
 import { ITERATE_KEY, MAP_KEY_ITERATE_KEY, track, trigger } from './dep'
 import { ReactiveFlags, TrackOpTypes, TriggerOpTypes } from './constants'
-import {
-  capitalize,
-  extend,
-  hasChanged,
-  hasOwn,
-  isMap,
-  toRawType,
-} from '@vue/shared'
-import { warn } from './warning'
+import { extend, hasChanged, hasOwn, isMap } from '@vue/shared'
+
+/**
+ * Map/Set/WeakMap/WeakSet 的 Proxy handler，get 中 track、set 中 trigger。
+ * 底层与 baseHandlers.ts 调用同一个 trigger()（dep.ts），后者负责普通对象/数组。
+ */
 
 type CollectionTypes = IterableCollections | WeakCollections
 
@@ -71,16 +68,6 @@ function createIterableMethod(
         },
       },
     )
-  }
-}
-
-function createReadonlyMethod(type: TriggerOpTypes): Function {
-  return function (this: CollectionTypes, ...args: unknown[]) {
-    return type === TriggerOpTypes.DELETE
-      ? false
-      : type === TriggerOpTypes.CLEAR
-        ? undefined
-        : this
   }
 }
 
@@ -297,21 +284,3 @@ export const shallowReadonlyCollectionHandlers: ProxyHandler<CollectionTypes> =
   {
     get: /*@__PURE__*/ createInstrumentationGetter(true, true),
   }
-
-function checkIdentityKeys(
-  target: CollectionTypes,
-  has: (key: unknown) => boolean,
-  key: unknown,
-) {
-  const rawKey = toRaw(key)
-  if (rawKey !== key && has.call(target, rawKey)) {
-    const type = toRawType(target)
-    warn(
-      `Reactive ${type} contains both the raw and reactive ` +
-        `versions of the same object${type === `Map` ? ` as keys` : ``}, ` +
-        `which can lead to inconsistencies. ` +
-        `Avoid differentiating between the raw and reactive versions ` +
-        `of an object and only use the reactive version if possible.`,
-    )
-  }
-}

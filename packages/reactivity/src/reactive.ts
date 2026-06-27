@@ -292,17 +292,17 @@ function createReactiveObject(
   if (target[ReactiveFlags.SKIP] || !Object.isExtensible(target)) {
     return target
   }
-  // target already has corresponding Proxy // target 已有对应的代理
+  // ================= 🌟若同样的 target 触发reactive,则直接返回已有对应的代理 =================
+  // target already has corresponding Proxy
   const existingProxy = proxyMap.get(target) // proxyMap的最主要作用就是看当前的这个对象有无被代理过
-  // 若已经代理过了 则直接 return
   if (existingProxy) {
-    return existingProxy
+    return existingProxy // 若已经代理过了 则直接 return
   }
   const targetType = targetTypeMap(toRawType(target)) // 观察指定类型
   if (targetType === TargetType.INVALID) {
     return target
   }
-  // =============================== 最终返回的 proxy ===============================
+  // ================= 🌟返回的最终 proxy =================
   // 若没有被代理过,则在下面进行对象代理
   const proxy = new Proxy(
     target, // 代理对象

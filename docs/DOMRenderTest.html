@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DOM vs JS 对象创建性能对比</title>
+  </head>
+  <body>
+    <p>打开浏览器控制台查看耗时结果</p>
+    <script>
+      const length = 10000
+
+      // 增加一万个 dom 节点，查看耗时
+      console.time('element')
+      for (let i = 0; i < length; i++) {
+        const div = document.createElement('div')
+        document.body.appendChild(div)
+      }
+      console.timeEnd('element')
+
+      // 增加一万个 JS 对象，查看耗时
+      console.time('js')
+      const divList = []
+      for (let i = 0; i < length; i++) {
+        const ele = { type: 'div' }
+        divList.push(ele)
+      }
+      console.timeEnd('js')
+    </script>
+  </body>
+</html>

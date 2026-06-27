@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proxy + Reflect</title>
+  </head>
+  <body>
+    <script src="./utils.js"></script>
+    <script>
+      /*
+       * 本讲作用：getter 内会再读其他属性时，get 里必须用 Reflect.get(target, key, receiver)，
+       * 否则 getter 内 this 指向原对象，依赖收集会漏掉 lastName/firstName，数据变了 effect 不更新。
+       */
+
+      const p1 = {
+        lastName: '张',
+        firstName: '三',
+        get fullName() {
+          return this.lastName + this.firstName;
+        },
+      };
+
+      // ❌ 错误写法：getter 内 this 指向 p1，lastName/firstName 不会被 track
+      const proxyBad = new Proxy(p1, {
+        get(target, key) {
+          track(target, key);
+          return target[key]; // this 指向 p1
+        },
+        set(target, key, val) {
+          target[key] = val;
+          trigger(target, key);
+          return true;
+        },
+      });
+
+      const p2 = {
+        lastName: '张',
+        firstName: '三',
+        get fullName() {
+          return this.lastName + this.firstName;
+        },
+      };
+
+      // ✅ 正确写法：getter 内 this 指向 proxyGood（而非 return target[key] 导致指向 p2），链式读取都能 track
+      const proxyGood = new Proxy(p2, {
+        get(target, key, receiver) {
+          track(target, key);
+          return Reflect.get(target, key, receiver);
+        },
+        set(target, key, val) {
+          target[key] = val;
+          trigger(target, key);
+          return true;
+        },
+      });
+
+      // --- 错误写法：只 track 到 fullName，改 lastName 不会更新 ---
+      let display = '';
+
+      effect(() => {
+        display = proxyBad.fullName;
+      });
+
+      console.log('bad 改之前:', display); // 张三
+      proxyBad.lastName = '李';
+      console.log('bad 改之后:', display); // 张三 ❌ 没更新
+
+      // --- 正确写法：track 到 fullName + lastName + firstName ---
+      effect(() => {
+        display = proxyGood.fullName;
+      });
+
+      console.log('good 改之前:', display); // 张三
+      proxyGood.lastName = '李';
+      console.log('good 改之后:', display); // 李三 ✅ 已更新
+
+      /*
+       * 思考：正确写法下，读 proxyGood.fullName 时 track 了哪些 key？—— 3 个
+       * 1. fullName
+       * 2. lastName（getter 内 this.lastName）
+       * 3. firstName（getter 内 this.firstName）
+       *
+       * 最后做一个总结：
+       * return target[key] 会让 fullName getter 内的 this 指向 p2，lastName/firstName 读不到 Proxy，
+       * 只 track 到 fullName → 改 lastName 后 display 仍是「张三」（见控制台 bad 改之后）。
+       * Reflect.get(target, key, receiver) 让 this 指向 proxyGood，getter 内链式读取都能 track，
+       * 改 lastName 后 effect 重跑 → display 变为「李三」（见控制台 good 改之后）。
+       * 所以 Vue 3 基于 Proxy 做响应式时，Reflect 不是可选优化，而是保证依赖收集完整的必要写法。
+       */
+    </script>
+  </body>
+</html>

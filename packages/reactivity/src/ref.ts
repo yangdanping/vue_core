@@ -128,6 +128,7 @@ class RefImpl<T = any> {
 
   constructor(value: T, isShallow: boolean) {
     // 实例被 new时 执行 constructor 保存 传入的值
+    // 使用 shallowRef 这里走浅复制逻辑
     this._rawValue = isShallow ? value : toRaw(value) // 是否浅复制 ， 如果时 则直接返回 传入的值 否则进行 获取其原始对象
     this._value = isShallow ? value : toReactive(value) // 是否浅复制 是 返回原value 否则 转换成 reactive 对象
     this[ReactiveFlags.IS_SHALLOW] = isShallow

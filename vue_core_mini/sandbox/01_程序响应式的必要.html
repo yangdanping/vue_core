@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    <script>
+      /*
+       * 本讲作用：演示普通 JS 中「源数据变化，派生值不会自动更新」的问题
+       * 从而导致每次修改源数据后，都需要手动调用 effect 来更新的行为,太麻烦了!
+       * 引出响应式需求——依赖变化时 effect 应自动重新执行，而非手动调用!
+       */
+
+      // 定义一个商品对象
+      let product = {
+        price: 10,
+        quantity: 2
+      };
+
+      // 总价格
+      let total = product.price * product.quantity;
+
+      // 计算总价格
+      let effect = () => {
+        total = product.price * product.quantity;
+      };
+
+      effect(); // 第一次计算总价格
+      console.log(`总价格: ${total}`); // 20
+
+      // --> 修改商品的数量
+      product.quantity = 5;
+
+      effect(); // 第二次计算总价格
+      console.log(`总价格: ${total}`); // 20
+
+      /* 
+      由此可知:
+      需要对 effect 中的 product.quantity 引入 🌟 getter 的行为
+      需要对 修改 product.quantity 引入 🌟 setter 的行为
+      */
+    </script>
+  </body>
+</html>

@@ -24,6 +24,11 @@ import {
 } from '@vue/shared'
 import { isRef } from './ref'
 
+/**
+ * 普通对象/数组的 Proxy handler，get 中 track、set 中 trigger。
+ * 底层与 collectionHandlers.ts 调用同一个 trigger()（dep.ts），后者负责 Map/Set 等集合类型。
+ */
+
 const isNonTrackableKeys = /*@__PURE__*/ makeMap(`__proto__,__v_isRef,__isVue`)
 
 const builtInSymbols = new Set(
@@ -44,7 +49,7 @@ function hasOwnProperty(this: object, key: unknown) {
   track(obj, TrackOpTypes.HAS, key)
   return obj.hasOwnProperty(key as string)
 }
-
+// 🌟 关键 基类handler -> BaseReactiveHandler() -> 基类响应式处理handler
 class BaseReactiveHandler implements ProxyHandler<Target> {
   constructor(
     protected readonly _isReadonly = false,
@@ -109,7 +114,7 @@ class BaseReactiveHandler implements ProxyHandler<Target> {
     }
 
     if (!isReadonly) {
-      track(target, TrackOpTypes.GET, key) // 读 → 收集依赖
+      track(target, TrackOpTypes.GET, key) // 收集依赖的关键代码 → track方法
     }
 
     if (isShallow) {
@@ -132,7 +137,7 @@ class BaseReactiveHandler implements ProxyHandler<Target> {
     return res
   }
 }
-
+// 🌟 关键 可变handler -> MutableReactiveHandler() -> 可变响应式处理handler
 class MutableReactiveHandler extends BaseReactiveHandler {
   constructor(isShallow = false) {
     super(false, isShallow)
