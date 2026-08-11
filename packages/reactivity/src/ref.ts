@@ -115,11 +115,27 @@ function createRef(rawValue: unknown, shallow: boolean) {
 
 /**
  * @internal
+ *
+ * Ref 实现：用 .value 的 get/set 做「读收集、写触发」
+ *
+ * 【初次渲染】
+ * render effect 开始执行
+ *   → 模板读 {{ userName }}（实际是 userName.value）
+ *   → get value() → track
+ *   → 记下：这个 render effect 依赖了 userName
+ *   → 页面显示 "daniel"
+ *
+ * 【修改】
+ * userName.value = 'xxx'
+ *   → set value() → 值变了 → trigger
+ *   → 通知：依赖过我的 render effect，重新跑一遍
+ *   → 再次读 userName.value → 页面更新成 "xxx"
+ *
+ * 一句话：读时 track，写时 trigger。
  */
 class RefImpl<T = any> {
-  // 创建一个 ref的 实现类
-  _value: T // 创建私有的 _value 变量 (🆕 未声明为 private)
-  private _rawValue: T // 创建私有的 _rawValue 变量
+  _value: T // 对外暴露的值（对象会经 toReactive 包装）
+  private _rawValue: T // 原始值，用于 hasChanged 比较
 
   dep: Dep = new Dep() // 是否 dep (🆕 已初始化为 Dep 实例)
 
@@ -130,14 +146,15 @@ class RefImpl<T = any> {
     // 实例被 new时 执行 constructor 保存 传入的值
     // 使用 shallowRef 这里走浅复制逻辑
     this._rawValue = isShallow ? value : toRaw(value) // 是否浅复制 ， 如果时 则直接返回 传入的值 否则进行 获取其原始对象
-    this._value = isShallow ? value : toReactive(value) // 是否浅复制 是 返回原value 否则 转换成 reactive 对象
+    this._value = isShallow ? value : toReactive(value) // 是否浅复制 是 返回原value 否则 转换成 reactive 对象 做深层响应式
     this[ReactiveFlags.IS_SHALLOW] = isShallow
   }
 
   get value() {
-    // 获取值的时候 直接将 constructor 保存的值 返回
+    // 读 .value 时若正处于 effect 执行中（全局 activeSub 有值），
+    // track 会把「当前这个 effect」登记到本 ref 的 dep 上，等价于记住：谁依赖了我
     this.dep.track()
-    return this._value // 获取value 是 返回 _value 对象
+    return this._value
   }
 
   set value(newValue) {
@@ -153,6 +170,8 @@ class RefImpl<T = any> {
     newValue = useDirectValue ? newValue : toRaw(newValue)
     if (hasChanged(newValue, oldValue)) {
       // 判断对象是否发生 变化 变了向下走
+      // trigger做了什么事: 值真的变了之后,通知所有订阅了这个 ref 的 effect
+      // 重新执行——告诉“读过我的人：我变了，你们该更新了
       this._rawValue = newValue // 将最新值 赋给 _rawValue
       this._value = useDirectValue ? newValue : toReactive(newValue) // 判断是否是基本数据类型  如果 是 则 将最新值返回 否则 继续转换 reactive
       this.dep.trigger()

@@ -1,3 +1,1 @@
-import { isArray } from '@vue/shared';
-
-console.info('hello!!!', isArray([]));
+export { reactive } from '@vue/reactivity';

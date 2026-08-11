@@ -303,7 +303,7 @@ function createReactiveObject(
     return target
   }
   // ================= 🌟返回的最终 proxy =================
-  // 若没有被代理过,则在下面进行对象代理
+  // 若未被代理过,则生成 proxy 实例返回
   const proxy = new Proxy(
     target, // 代理对象
     targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers, // 代理方式

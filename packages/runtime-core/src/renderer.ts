@@ -1436,7 +1436,19 @@ function baseCreateRenderer(
       }
     }
 
-    // create reactive effect for rendering
+    /**
+     * 为每个组件创建 render 专用的 ReactiveEffect（instance.effect）。
+     *
+     * template 中的 {{ count }}、v-if 条件等，在 componentUpdateFn 首次/再次执行时会
+     * 读取响应式数据 → Proxy get → track → 依赖登记到此 effect 上。
+     *
+     * 与 dep.ts trigger 链路最后一环的对应关系：
+     *   数据变更 → trigger → dep.notify()
+     *   → 本 effect 重跑 componentUpdateFn（「组件 render 重跑」）
+     *   → 生成新 VNode → effect.scheduler → queueJob → patch DOM（「视图更新」）
+     *
+     * 「render 重跑」在本段创建 effect；「视图更新」含后续 queueJob + patch，不在 dep.ts 内。
+     */
     instance.scope.on()
     const effect = (instance.effect = new ReactiveEffect(componentUpdateFn))
     instance.scope.off()
@@ -1445,6 +1457,7 @@ function baseCreateRenderer(
     const job: SchedulerJob = (instance.job = effect.runIfDirty.bind(effect))
     job.i = instance
     job.id = instance.uid
+    // trigger 链末端：将 render effect 放入更新队列，再 patch DOM（见 dep.ts 注释 254-255 行）
     effect.scheduler = () => queueJob(job)
 
     // allowRecurse
